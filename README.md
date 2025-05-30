@@ -1,14 +1,14 @@
-Per Martin-Löf: Calculus of Inductive Constructions
-===================================================
+Per Martin-Löf: Theory of Types
+===============================
 
 <img src="https://per.groupoid.space/img/per.jpg" height=400>
 
 ## Abstract
 
-**Per** is MLTT/CIC tactical theorem prover implemented in OCaml, constitutes a minimal core for a dependently-typed lambda calculus,
+**Per** is MLTT-72 tactical theorem prover implemented in OCaml, constitutes a minimal core for a dependently-typed lambda calculus,
 constrained to exclude pattern matching, let-bindings, implicit arguments, modules, namespaces, and function extensionality.
-It encompasses universes, dependent products `Pi`, dependent pairs `Sigma`, identity types `Id`, and `Inductive` types with strict positivity enforcement.
-Recent refinements ensure totality for user-defined lambda terms via a positive occurrence check. 
+It encompasses universes, dependent products `Pi`, dependent pairs `Sigma`, and identity types `Id`.
+Refinements ensure totality for user-defined lambda terms via a positive occurrence check. 
 Its mathematical properties, focusing on correctness, soundness, totality, canonicity, decidability and related
 attributes relevant to formal mathematics are being analyzed.
 
@@ -23,7 +23,6 @@ The type checker operates over a term syntax comprising:
 * `Sigma (x, A, B)`: Dependent pair types.
   `Pair (a, b)`, `Fst p`, `Snd p` construction and projections.
 * `Id (A, a, b)`: Identity type, with `Refl` a and `J` eliminator.
-* `Inductive d`: Inductive types with intros `Constr` and eliminator `Ind`.
 
 The typing judgment `Γ ⊢ t : T` is defined via `infer` and `check` functions,
 with definitional equality `Γ ⊢ t = t'` implemented via `equal`.
@@ -35,10 +34,7 @@ type term =
   | Var of name | Universe of level
   | Pi of name * term * term | Lam of name * term * term | App of term * term
   | Sigma of name * term * term | Pair of term * term | Fst of term | Snd of term
-  | Id of term * term * term | Refl of term
-  | J of term * term * term * term * term * term  (* J A a b C d p *)
-  | Inductive of inductive | Constr of int * inductive * term list
-  | Elim of inductive * term * term list * term
+  | Id of term * term * term | Refl of term | J of term * term * term * term * term * term  (* J A a b C d p *)
 ```
 
 ## Semantics
@@ -91,60 +87,10 @@ aligning with CIC’s eliminator semantics.
 * `Var`: Replaces `x` with `s`, leaves others unchanged.
 * `Pi/Lam`: Skips substitution if bound variable shadows `x`, else recurses on domain and body.
 * `App/Constr/Elim`: Recurses on subterms.
-* `Inductive`: No substitution (assumes no free variables).
 
 **Theorem**. Substitution preserves typing (cf. [13], Lemma 2.1).
 If `Γ ⊢ t : T` and `Γ ⊢ s : A`, then `Γ ⊢ t[x := s] : T[x := s]`
 under suitable conditions on x.
-
-### Inductive Instantiation `apply_inductive`
-
-Instantiate an inductive type’s constructors with parameters, used only in `infer_Ind`.
-
-This function ensures type-level parametricity, critical for
-polymorphic inductives like List A. The fold-based substitution
-avoids explicit recursion, leveraging OCaml’s functional style,
-but assumes args are well-typed, deferring validation to infer.
-
-* Validates argument count against d.params.
-* Substitutes each parameter into constructor types using subst_param.
-
-**Theorem**: Parameter application preserves inductiveness (cf. [4], Section 4).
-If `D` is an inductive type with parameters `P`, then `D[P]` is
-well-formed with substituted constructors.
-
-### Infer Contstructor `infer_ctor`
-
-Validate constructor arguments against its type.
-
-This function implements the dependent application rule for constructors,
-ensuring each argument satisfies the constructor’s domain type in sequence.
-The recursive descent mirrors the structure of `Pi` types, where `ty` is peeled
-layer by the layer, and `subst x arg b` updates the type for the next argument.
-
-* Recursively matches `ty` (a Pi chain) with `args`, checking each argument and substituting.
-* Returns the final type when all arguments are consumed.
-
-**Theorem**. Constructor typing is preserved (cf. [1], Section 4, Application Rule; [1], Section 4.3).
-If `ctx ⊢ c : Π (x:A), B` and `ctx ⊢ a : A`, then `ctx ⊢ c a : B[x := a]`.
-
-### Infer General Induction `infer_Ind`
-
-Type-check an dependent elimination (induction principle) over inductive type `d`.
-
-This function implements the dependent elimination rule of CIC,
-generalizing both computation (e.g., plus : `Nat → Nat → Nat`)
-and proof (e.g., `nat_elim : Πx:Nat.Type0`). The check `equal env ctx t_ty a`
-ensures the motive’s domain aligns with the target, while `compute_case_type`
-constructs the induction principle by injecting `App (p, var)`
-as the hypothesis type for recursive occurrences, mirroring the
-fixpoint-style eliminators of CIC [1]. The flexibility in result_ty
-avoids hardcoding it to D, supporting higher-type motives (e.g., Type0).
-
-**Theorem**. Elimination preserves typing (cf. [1], Section 4.5; Elimination Rule for Inductive Types). For an inductive type `D`
-with constructors `c_j`, if `ctx ⊢ t : D` and `ctx ⊢ P : D → Type_i`,
-and each case case_j has type `Πx:A_j.P(c_j x)` where `A_j` are
-the argument types of `c_j` (including recursive hypotheses), then `ctx ⊢ Ind(D, P, cases, t) : P t`.
 
 ### Infer Equality Induction `infer_J`
 
@@ -196,8 +142,6 @@ If `ctx ⊢ t : Universe i`, then `check_universe env ctx t = i`.
 Check that `t` has type `ty`.
 
 * `Lam`: Ensures the domain is a type, extends the context, and checks the body against the codomain.
-* `Constr`: Infers the constructor’s type and matches it to the expected inductive type.
-* `Elim`: Computes the elimination type via check_elim and verifies it equals ty.
 * Default: Infers t’s type, normalizes ty, and checks equality.
 
 The function leverages bidirectional typing: specific cases (e.g., `Lam`)
@@ -209,22 +153,6 @@ and equal capturing judgmental equality.
 **Theorem**. Type checking is complete (cf. [1], Normalization).
 If `ctx ⊢ t : T` in the type theory, then `check env ctx t T` succeeds,
 assuming normalization and sound inference.
-
-### Branch Evaluation `apply_case`
-
-Apply a case branch to constructor arguments, used only in `reduce`.
-
-This function realizes CIC’s ι-reduction for inductive eliminators [1], where
-a case branch is applied to constructor arguments, including recursive hypotheses.
-For Nat’s succ in plus, `ty = Πn:Nat.Nat`, `case = λk.λih.succ ih`, and `args = [n]`.
-The recursive check `a = Inductive d` triggers for `n : Nat`, computing `ih = Elim(Nat, Π_:Nat.Nat, [m; λk.λih.succ ih], n)`,
-ensuring `succ ih : Nat`. The nested apply_term handles multi-argument lambdas
-(e.g., k and ih), avoiding explicit uncurrying, while substitution preserves
-typing per CIC’s rules.
-
-**Theorem**. Case application is sound (cf. [1] Elimination Typing).
-If `case : Πx:A.P(c x)` and `args` match `A`, then `apply_case env ctx d p cases case ty args`
-yields a term of type `P(c args)`.
 
 ### One-step β-reductor `reduce`
 
@@ -239,9 +167,6 @@ though unconventional, supports type-level computation, consistent with CIC’s 
 * `App (Lam, arg)`: Substitutes arg into the lambda body (β-reduction).
 * `App (Pi, arg)`: Substitutes arg into the codomain (type-level β-reduction).
 * `App (f, arg)`: Reduces f, then arg if f is unchanged.
-* `Elim (d, p, cases, Constr)`: Applies the appropriate case to constructor arguments, computing recursive calls (ι-reduction).
-* `Elim (d, p, cases, t')`: Reduces the target `t'`.
-* `Constr`: Reduces arguments.
 * Default: Returns unchanged.
 
 **Theorem**. Reduction preserves typing (cf. [8], Normalization Lemma, Subject Reduction).
@@ -325,7 +250,7 @@ This is upheld by normalization and the absence of paradoxes such as Girard's [G
 ```
 https://per.groupoid.space/
 
-  🧊 MLTT/CIC Theorem Prover version 0.5 (c) 2025 Groupoїd Infinity
+  🧊 MLTT Theorem Prover version 0.5 (c) 2025 Groupoїd Infinity
 
 For help type `help`.
 
@@ -337,17 +262,6 @@ Context: []
 1 goals remaining
 >
 ```
-
-## CIC
-
-[1]. Coquand, T., & Paulin-Mohring, C. Inductively defined types. 1990. <br>
-[2]. Christine Paulin-Mohring. Inductive Definitions in the System Coq. Rules and Properties. 1992.<br>
-[3]. <a href="https://inria.hal.science/hal-01094195/document">Christine Paulin-Mohring. Introduction to the Calculus of Inductive Constructions.</a> 2014.<br>
-[4]. <a href="https://www.cs.cmu.edu/%7Efp/papers/mfps89.pdf">Frank Pfenning, Christine Paulin-Mohring. Inductively Defined Types in the Calculus of Construction</a> 1989.<br>
-[5]. <a href="https://www.cs.unibo.it/~sacerdot/PAPERS/sadhana.pdf"> A. Asperti, W. Ricciotti, C. Sacerdoti Coen, E. Tassi. A compact kernel for the calculus of inductive constructions.</a><br>
-[6]. P.Dybjer. Inductive families. 1997. <br>
-[7]. R.Harper, D.Licata. Mechanizing metatheory in a logical framework. 2007.<br>
-[8]. M.Bezem, T.Coquand, P.Dybjer, M.Escardó. <a href="https://arxiv.org/pdf/2212.03284">Type Theory with Explicit Universe Polymorphism</a> 2024.<br>
 
 ## MLTT
 
