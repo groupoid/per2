@@ -1,5 +1,5 @@
-Per Martin-Löf: Intuitionistic Theory of Types
-==============================================
+Per Martin-Löf: Intuitionistic Type Theory
+==========================================
 
 <img src="https://per.groupoid.space/img/per.jpg" height=400>
 
