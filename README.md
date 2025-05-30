@@ -5,7 +5,7 @@ Per Martin-Löf: Intuitionistic Type Theory
 
 ## Abstract
 
-**Per** is MLTT-72 tactical theorem prover implemented in OCaml, constitutes a minimal core for a dependently-typed lambda calculus,
+**Per** is MLTT-73 tactical theorem prover implemented in OCaml, constitutes a minimal core for a dependently-typed lambda calculus,
 constrained to exclude pattern matching, let-bindings, implicit arguments, modules, namespaces, and function extensionality.
 It encompasses universes, dependent products `Pi`, dependent pairs `Sigma`, and identity types `Id`.
 Refinements ensure totality for user-defined lambda terms via a positive occurrence check. 
